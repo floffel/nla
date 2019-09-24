@@ -1,0 +1,39 @@
+js_include njs/auth.js;
+
+server {
+    listen	 80;
+    listen	 [::]:80;
+    listen       443 ssl http2;
+    listen       [::]:443 ssl http2;
+
+    include include/ssl.conf;
+    include include/gzip.conf;
+    include include/acme.conf;
+
+    server_name example.com default;
+    root /usr/local/www/example.com/;
+    index  index.html;
+
+    client_max_body_size 10M;
+
+    ssl_certificate /somewhere/example.com/fullchain.pem;
+    ssl_certificate_key /somewhere/private/example.com.pem;
+
+    server_tokens off;
+
+    location /auth/ {
+        js_content validate;
+    }
+
+    location /ldapauth {
+      proxy_pass http://example.com/doldapauth;
+      proxy_set_header Authorization "Basic $arg_auth";
+      proxy_pass_header  Authorization;
+    }
+
+    location /doldapauth {
+      auth_ldap "Forbidden";
+      auth_ldap_servers mail_users;
+      js_content granted;
+    }
+}
