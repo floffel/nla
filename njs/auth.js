@@ -6,23 +6,30 @@ var options =  {
     argname: 'auth',
   },
   server: {
-    imap: {
+    imap: [{
       host: 'backend.mail',
       port: '143',
-    },
-    pop3: {
+      auth: ['plain', 'login', 'none'],
+    }],
+    pop3: [{
       host: 'backend.mail',
       port: '110',
-    },
-    smtp: {
+      auth: ['plain'],
+    }],
+    smtp: [{
       host: 'backend.mail',
       port: '25',
-    },
+      auth: ['plain', 'login'],
+    }],
   },
   errors: {
     generic: {
       code: '500 generic',
-      msg: 'Some generic internal server error occoured...',
+      msg: 'Some generic internal server error occoured',
+    },
+    noAuthMethod: {
+      code: '501 authmethod',
+      msg: 'No server for the desired auth method available',
     },
     unauthorized: {
       code: '503 user',
@@ -34,7 +41,7 @@ var options =  {
     },
     tooManyRetrys: {
       code: '403 retrys',
-      msg: 'Too many retrys! Please try again later....',
+      msg: 'Too many retrys! Please try again later',
     },
     unknownProtocol: {
       code: '403 protocol',
@@ -60,6 +67,33 @@ function isHeaderNan() {
   }
 
   return false;
+}
+
+// helper method for getting a single server, which is
+// applicable for serving the desired auth method
+function getServer(s, m) {
+  var ms = 0;
+
+  for(var i in s) {
+    if(s[i].auth.includes(m)) {
+      ms++;
+    }
+  }
+
+  if(ms == 0) {
+    return false;
+  }
+
+  var rnd = Math.floor(Math.random() * ms);
+
+  for(var i in s) {
+    if(s[i].auth.includes(m)) {
+      rnd--;
+    }
+    if(rnd <= 0) {
+      return s[i];
+    }
+  }
 }
 
 // helper function to design the good respnse, see:
@@ -115,28 +149,15 @@ function validate(r) {
 
   var authstring = ( auth.user + ':' + auth.pass ).toUTF8().toString('base64') 
 
-  r.error("authstring: " + authstring)
-  //r.subrequest(options.subrequest.url, { body: '', args: (options.subrequest.argname + '=' + authstring), method: options.subrequest.method}, function(c) {
   r.subrequest(options.subrequest.url, { body: '', args: (options.subrequest.argname + '=' + authstring), method: options.subrequest.method }, function(c) {
-    r.error("done: " + c.done);
-    r.error("sub status: "  + c.status);
-    r.error("sub body: "  + c.body);
     switch(c.status) {
       case 200:
-        switch(auth.protocol) {
-          case 'imap':
-            success(r, options.server.imap);
-	    break;
-          case 'pop3':
-            success(r, options.server.pop3);
-	    break;
-          case 'smtp':
-            success(r, options.server.smtp);
-	    break;
-          default:
-            failure(r, auth, options.errors.unknownProtocol);
-            break;
-        } 
+        var server = getServer(options.server[auth.protocol], auth.method);
+        if(!server) {
+          failure(r, auth, options.errors.generic)
+        } else {
+          success(r, server);
+        }
         break;
       case 401:
         failure(r, auth, options.errors.noAuth);
